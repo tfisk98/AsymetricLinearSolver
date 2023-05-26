@@ -11,46 +11,55 @@ using LinearAlgebra
 
 
 function MyMINRES(A::Matrix{Float64},b::Vector{Float64},x0::Vector{Float64},tol::Float64)
-    d = size(A)[1]
+    d::Int16 = size(A)[1]
     @assert A' - A == zeros(d, d) "Non symétrique"
     r::Vector{Float64} = b - A*x0
-    it::Int16 = 1 
+    it::Int16 = 1 #Juqu'a 65k iterations
     norm_r::Float64 = LinearAlgebra.norm2(r)
     V::Matrix{Float64} = zeros(d,1) 
     V[:,1]::Vector{Float64} = (r/norm_r)
     Vₙ::Matrix{Float64} = V
     norm_rO::Float64 = norm_r
-    Ln, Qn = lq(ones(1,1)) 
+    Ln::Matrix{Float64} = zeros(1,1); #Qn::Matrix{Float64}= zeros(3,3)
     while(norm_r >= tol) #&& n <= 10)
         #AlgoOrthonomalisationLanczos
         Vₙ = V #Vₙ (d,n)
         #print(size(V) ,"\t")
-        V = HermitianLanczos(A,r,it) #(d, n+1 )
+        V = HermitianLanczos(A,V,it) #(d, n+1 )
         #print("V =", V,"\n")
         @assert V[:,1:it] == Vₙ "Problème Hermitian Lanczos"
         #print(size(V) ,"\t")
-        Tn = (V')*A*Vₙ #(n+1,n) #Problème ICI
-        Testn = Tn[1:it,:]
+        T::Matrix{Float64} = (V')*A*Vₙ #(n+1,n) #Problème ICI
+        Tn::Matrix{Float64} = T[1:it,:]
         #print("Tn :", Tn ,"\n") #Erreur d'arrondis sur les calculs de prod scalaire
         #@assert isapprox(Tridiagonal(Testn), Testn; atol=1e-4)  "Testn doit être tridiagonal"
-        if !isapprox(Tridiagonal(Testn), Testn; atol=1e-2)
+        if !isapprox(Tridiagonal(Tn), Tn; atol=1e-2)
             println("Tn :", Tn)
             break
         end
         #print("size Tn =", size(Tn), "\t")
-        (l,q) = LinearAlgebra.lq(Tn')#lq sur la transposée de Tn et non tn
+        (l,q) = LinearAlgebra.lq(T')#lq sur la transposée de Tn et non tn
         Ln = l #(n,n) 
         #println(size(Ln))
         #print("Ln =", Ln ,"\n")
         #print("size Ln =", size(Ln), "\t")
         Qn = q#(n+1,n+1)
+        if it<= 5 
+            #println("Tn:", Tn)
+            #println("Ln:", Ln)
+            println("Qn:", Qn)
+        end 
         @assert isapprox((Qn')*Qn, I;atol=1e-4) "Qn doit être orthogonale"
         #print("size Qn =", size(Qn), "\t")
-        e_un = zeros(it+1) ; e_un[1] = 1 
-        e_nPlusUn = zeros(it+1) ;e_nPlusUn[it+1]= 1 
+        e_un::Vector{Float64} = zeros(it+1) ; e_un[1] = 1 
+        e_nPlusUn::Vector{Float64} = zeros(it+1) ;e_nPlusUn[it+1]= 1 
         norm_r = abs(norm_rO*e_nPlusUn'*(Qn)*e_un)
         print("norm_r =", norm_r,"\n")
         it = it+1
+
+        xₙ::Vector{Float64}= Vₙ*(inv(Ln'))*(norm_rO*([Matrix(I,it-1,it-1) zeros(it-1,1)]*Qn*e_un)) + x0
+        nrm  = LinearAlgebra.norm2(b - A*xₙ)
+        println("|b-Axn| :", nrm)
 
     end
 
@@ -61,35 +70,32 @@ function MyMINRES(A::Matrix{Float64},b::Vector{Float64},x0::Vector{Float64},tol:
     println("e :",size(e) )
     println("it", it)
     #Ln_t = inverse(transpose(Ln))
-    x::Vector{Float64}= Vₙ*(inv(Ln'))*(norm_rO*([Matrix(I,it-1,it-1) zeros(it-1,1)]*Qn*e))
+    x= Vₙ*(inv(Ln'))*(norm_rO*([Matrix(I,it-1,it-1) zeros(it-1,1)]*Qn*e)) + x0
 
 
     return (it,x,norm_r)
 
 end
 
-function HermitianLanczos(A::Matrix{Float64},r::Vector{Float64},it::Int16) #To Work on
-    d = length(r)
-    v::Matrix{Float64} = zeros(d,it+1)
-    norm_r::Float64  = LinearAlgebra.norm2(r)
-    v[:,1]::Vector{Float64} = (r/norm_r)
-
-    for j in range(1,it)
+function HermitianLanczos(A::Matrix{Float64},V::Matrix{Float64},it::Int16) #To Work on
        
-        hjj::Float64 = (v[:,j]')*A*v[:,j] 
-        if j == 1
-            new_v::Vector{Float64} = A*v[:,j] - hjj*v[:,j]
-        else 
-            new_v = A*v[:,j] - hjj*v[:,j] - ((v[:,j-1]')*A*v[:,j])*v[:,j-1]
-        end
-        h::Float64 = LinearAlgebra.norm2(new_v)
-        #print("h", h, "\n")
-        if !isapprox(h, 0; atol=1e-4) 
-            v[:,j+1] = new_v/h
-        end 
-    end 
-    print(size(v) ,"\t")
-    return v 
+    hit::Float64 = (V[:,it]')*A*V[:,it] 
+    if it == 1
+        new_v::Vector{Float64} = A*V[:,it] - hit*V[:,it]
+    else 
+        new_v = A*V[:,it] - hit*V[:,it] - ((V[:,it-1]')*A*V[:,it])*V[:,it-1]
+    end
+    h::Float64 = LinearAlgebra.norm2(new_v)
+    #print("h", h, "\n")
+    if !isapprox(h, 0; atol=1e-4) 
+        vit = new_v/h
+    else 
+        return [V zeros(length(V[:,1]))]
+    end
+    
+    V = [V  vit ]
+    print(size(V) ,"\t")
+    return V
 end
         
 

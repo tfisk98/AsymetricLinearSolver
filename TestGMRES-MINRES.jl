@@ -3,6 +3,8 @@ using IterativeSolvers
 using Dates
 
 include("MyMinres.jl")
+include("MyGmresUpdated.jl")
+include("MyMinresUpdated.jl")
 export MyMINRES
 
 #Soit le probleme Ax = b 
@@ -10,8 +12,8 @@ export MyMINRES
 n::Int64= 50
 ϵ::Float64 = 1/n
 
-dc = (-2)*ones(n)
-sdl = ones(n-1)
+dc::Vector{Float64} = (-2)*ones(n)
+sdl::Vector{Float64} = ones(n-1)
 Jn::Matrix{Float64} = SymTridiagonal(dc, sdl)
 #Ln[1,n] = 1
 #Ln[n,1] = 1
@@ -50,6 +52,27 @@ Mxn::Vector{Float64} = IterativeSolvers.minres(MA, Mb) #Plus precis que GMRES ma
 t2 = Dates.now()
 print("Minres L2-error =", LinearAlgebra.norm2(Mb-MA*Mxn), "\n")
 print("MINRES execution time :", (t2-t1),"\n")
+
+
+t1 = Dates.now()
+(itn, MMxn::Vector{Float64}, norm_r) = MyGMRESUpdated(MA, Mb, Mx0, tol)#
+#print(raw"size(Mb.dims) =", size(Mb),"\n")
+#print(raw"size(MMxn) =", size(MMxn),"\n")
+t2 = Dates.now()
+print("Nombre d'itérations :", itn,("\n"))
+print("MyGMRESUpdated L2-error =", LinearAlgebra.norm2(Mb-MA*MMxn), "\n")#ne marche pas 
+print("MyGMRESUpdated execution time:", (t2-t1))
+
+
+t1 = Dates.now()
+(itn, MMxn::Vector{Float64}, norm_r) = MyMINRESUpdated(MA, Mb, Mx0, tol)#
+#print(raw"size(Mb.dims) =", size(Mb),"\n")
+#print(raw"size(MMxn) =", size(MMxn),"\n")
+t2 = Dates.now()
+print("Nombre d'itérations :", itn,("\n"))
+print("MyMINRESUpdated L2-error =", LinearAlgebra.norm2(Mb-MA*MMxn), "\n")#ne marche pas 
+print("MyMINRESUpdated execution time:", (t2-t1))
+
 
 t1 = Dates.now()
 (itn, MMxn::Vector{Float64}, norm_r) = MyMINRES(MA, Mb, Mx0, tol)#
