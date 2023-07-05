@@ -1,0 +1,349 @@
+\documentclass[12 pt]{article}
+
+
+
+\usepackage[french]{babel}
+\usepackage[utf8]{inputenc}
+\usepackage{amsmath,amssymb,amsthm}
+
+
+
+\title{Solveur pour problème Asymétrique de type Ax=b}
+\author{Thomas FISK, avec l'aide de Mi-Song DUPUY}
+
+
+\begin{document}
+
+
+\maketitle
+\newtheorem*{theorem}{Théorème}
+
+\section{Introduction}
+
+\paragraph*{Introduction}{}
+On considère un problème linéaire du type :
+  \[ Ax =b \]
+où A $\in \mathbb{R}^{n\_1...n\_d \times n\_1...n\_d} et b \in \Re\_{n\_1...n\_d}.$ Le but est d'étudier la résolution de ce problème par des trains de tenseurs.
+Lorsque A est positive et symétrique, on peut résoudre ce problème assez rapidement en adatant des méthodes de type gradient conjugué. 
+Dans le cas ou A n'est pas symétrique, on peut alors utiliser un algorithme de type GMRES. Cependant l'adaption de l'algorithme aux trains de tenseurs necessite de réduire la dimension d du problème, ce qui se fait au détriment de la convergence de l'algorithme.
+Une idée pour contourner ce problème et garder une récurrence courte, peut être de symétriser le problème de base et considérer le nouveau problème suivant :
+   \[\begin{pmatrix}
+    0 & A \\
+    A^{T} & 0 
+   \end{pmatrix}
+   \begin{pmatrix}
+    0 \\ x 
+   \end{pmatrix}
+   = 
+   \begin{pmatrix}
+    b \\ 0 
+   \end{pmatrix}
+   \]
+Bien que non défini-positif la symétrie du problème nous permet alors de conserver une récurrence courte, en utiilisant un algorithme de type MINRES. "En contre-partie on double la taille du système à résoudre ce qui à priori peut engendrer des problèmes au niveau des capacités mémoires de l'ordinateur sur lesquels on le fait tourner."
+On verra cependant que certains de ces désagrément pourront aisément être contourné. 
+
+\section{Un Nouveau Problème}
+\subsection*{Symétrie}
+
+\paragraph*{Symétrie}{}
+
+La symétrie acquise permet de jeter l'algorithme d'orthonomormalisation d'Arnoldi qui devient de plus en plus long à mesure
+que la dimension augmente et de prendre l'algorihtme d'Hermitian Lanczos dont
+la complexité est indépendante de la dimension de la base, tout en conservant la propriété d'orthonomormalisation de cette dernière.
+De plus la matrice Hessenberg T devient tridiagonale symétrique ce qui facilite grandement le stockage des coefficients de T. (Le fait que T soit tridiagonale a egalement pour conséquence de rendre la matrice diagonale supérieure R de sa décomposition QR tridiagonale également. Cela facilite encore le stockage de R.)
+
+\subsection*{Beaucoup de zéros}
+
+La moitié des coéfficients de la matrice du nouveau problème MA sont des zéros. De même la nouvelle solution Mx est composé de moitié de zéros tous situés dans une partie du vecteur (haute(1), ou basse(2)). Mb est également dans ce cas et ses zéros sont égalament dans la partie 2. On prendra le vecteur initial Mx0 de cette forme également. 
+Ceci a pour conséquence que le résidu initial Mr0 a sa partie (1) nulle également. Cette propriété va avoir une incidence sur tous les vecteurs suivant de la base de Krylov. 
+En effet, on remarque tout d'abord les choses suivantes : 
+Mx un vecteur de partie haute nulle et de partie basse x  :
+ \[ MA \cdot Mx \Leftrightarrow A \cdot x. \] 
+Soit a present Mx un vecteur de partie basse nulle et de partie basse x : 
+\[  MA \cdot Mx \Leftrightarrow A \cdot x. \]
+ Dans le premier cas on voit cependant que le vecteur résultant My sera, contrairement a Mx, de partie haute non nulle et de partie basse nulle. 
+ Inversement dans le second cas. 
+ Ceci a une conséquence intéressante. Soit Mx un vecteur de partie haute ou basse nulle. On a alors :
+\[  (MA\cdot Mx,Mx) = 0   \]
+ Ainsi la diagonale principale de la matrice Hessenberg T est nulle. Stocker T est ainsi équivalent à stocker un vecteur.  
+
+\section{Des consqueces intéressantes,...}
+
+\subsection*{Convergence une itération sur deux}
+
+En observant la répartition des valeurs singulières de la matrice MA, on observe que celles-ci sont symétriques autour de zéros, (i.e. lorsque x est valeur singulière (-x) semble l'être égalament). Ceci semble intuiter pour faire baisser
+
+Ce qui est confirmer par l'observation suivante. 
+  
+
+
+
+\subsection*{Brève et naïve présentation de l'algorithme}
+
+On prendra pour donnée initiale la matrice du problème MA, le vecteur initial $Mx_{0}$, le second membre Mb ainsi que la tolérance tol. On calcule le résidu initial $Mr_{0}$ que l'on normalise ($v_{1}$). 
+On initialise V, la matrice qui est la matrice contenant la base orthonormalisé de notre espace de Krylov de recherche $(K_{n}(MA, Mr_{0}))$. V est initialisé à v1. On initialise notre matrice de Hessenberg T 
+qui est de coordonné $(v_{i},A*v_{j})$. Tant que la norme de notre résidu est supérieure a notre tolérance tol et que le nombre d'itération n'a pas atteint le grade de $Mr_{0}$ par respect a $MA$ on répète la boucle suivante.
+Pour chaque itération it. On calcule $v_{it+1}$, on mets a jour V, on calcule la nouvelle matrice de Hessenberg T ($T \leftarrow V^t_{it+1}*MA*V_{it}$).On calcule la nouvelle matrice de rotation $G_it$ en mettant a jour les coefficients $c_it$ et $s_it$ .
+On calcule la nouvelle décomposition QR de T en multipliant $Q^t$ par la gauche par la nouvelle matrice de rotation $G_it$. On déduit R par la formule $R_it = Q^t_it*T*[I_it \\ 0^t ]$. 
+Le nouveau résidu $ \Vert Mr \Vert$ est $\Vert Mr_{0} \Vert *Q_{it}[it+1,1]$. On note n l'itération it de sortie de boucle.
+Une fois que l'on sort de la boucle on calcule la solution $Mx\_n$ via la formule :
+  \[ Mx_n = V_n*R^{-1}_n*(\Vert Mr_0 \Vert *Q_{n}[1:n,1]) \].
+On retourne ensuite le triplet (n, $Mx\_n, \Vert Mr \Vert$).
+On remarque dans cet algorithme l'utilisation de produit de matrice de grandes dimensions ce qui rends cet algorithme très peu exportable en grande dimension.
+Un affichage de $Mx\_n$ permet également de remarquer que celui-ci possède la même structure que $Mx\_0$.
+De plus la structure de la matrice MA et des vecteurs $Mx\_0$ font que les matrices que l'on stocke contiennent beaucoup de zéros. Ceci augmente inutilement les capacités de stockage nécessaire et ralentit l'algorithme inutilement.
+On verra comment améliorer cela par la suite.
+On notera $T_{it}$ la matrice $T*[I_it \ 0^t] $.
+
+\subsection*{Création d'une nouvelle structure}
+
+Afin de réduire le stockage de moitié. La création d'une nouvelle façon de stocker les vecteurs dont au moins une moitié des composantes est nulle, doit être mise en place. On créé ainsi la nouvelle structure MyHNV (My HalfNullVector) qui se compose comme suit :
+  \[ MyHNV = {  d(taille) : le vecteur stock\acute{e} est en r\acute{e}alit\acute{e} de longueur 2*d \\   
+                v : vecteur non nul de longueur d \\
+                localisation : dans quelle partie du vecteur stock\acute{e} se trouve v (1 pour [1:d], 2 pour [d+1:2*d])  } \]
+On peut alors utiliser les remarques du dessus sur la matrice MA pour définir le produit de MA avec un élément de MyHNV. 
+On conclut également que la norme associée à MA de tout vecteur de MyHNV vaut zéro. Ceci confirme que la diagonale principale de notre matrice 
+de Hessenberg T est nulle. On peut donc stocker T en un vecteur de taille it.
+
+\subsection*{Mise à jour matrice de rotation}
+
+D'après Paige et Saunders, la mise à jour des coéfficients de la matrice de rotation se fait en calculant d'abord :
+ \[ Q^t_{it-1}*T_{it} \]
+On prends le coefficient(it,it) de cette matrice. On remarque que comme T ne possède que 2 diagonales non nulles,(celles autour de sa diagonale principale) :
+ \[ (Q^t_{it-1}*T_{it}) (it,it) =  Q^t_{it-1}[it,it-1]*T_{it}[it-1,it] \]
+On nomme ce réel $\gamma$. On prends ensuite le coeff $T_{it}(it+1,it)$ pour $\beta$.
+On calcule :
+\[\gamma_{it} = \sqrt[]{\gamma^2 + \beta^2} \] 
+Ce qui nous donne ensuite :
+\[ c_{it} = \frac{\gamma}{ \gamma_{it}}\]   et \[s_{it} = \frac{\beta}{\gamma_{it}} \]
+Les $c_{it}$ et $s_{it}$ sont choisis de façon à annuler l'expression :
+\[ -s_{it}*Q^t_{it-1}[it,it-1]*T_{it}[it-1,it] + c_it*T[it+1,it] = c_it*T[it+1,it] \] (cf Greenbaum Algo 4 page 44 ou Paige et Saunders) 
+qui n'est autre que le coefficient (it+1,it) du produit $Q^t_{it}*T$. Ce coefficient doit etre nul 
+car le resultat du dernier produit est la matrice triangulaire supérieure de la décomposition QR de T.
+
+\subsection*{Observation sur la mise à jour des matrices de rotations}
+
+On va maintenant prouver un résultat utile pour l'étude de la convergence :
+
+\begin{theorem}
+$c_{it} = 0 \Rightarrow c_{it+2} = 0$
+\end{theorem}
+
+\begin{proof}
+Supposons qu'à une itération it, on ait $c_{it}=0$. En calculant la matrice $Q_{it}$ on voit que : 
+   $ \\
+\left (\begin{array}{cc} Q_{it}(it+1, it) & Q_{it}(it+1,it+1) \end{array}\right )
+\leftarrow
+\left (\begin{array}{cc} -s_{it} & c_{it} \end{array} \right )
+\left (\begin{array}{cc} Q_{it-1}(it,it) & 0 \\ 0 & 1\end{array} \right ) \\ $ 
+Donc : $ \\
+\left (\begin{array}{cc} Q_{it}(it+1, it) & Q_{it}(it+1,it+1) \end{array}\right )
+\leftarrow
+\left (\begin{array}{cc} -1 & 0 \end{array} \right )
+\left (\begin{array}{cc} c_{it-1} & 0 \\ 0 & 1\end{array} \right ) \\$ 
+On a donc que $Q_{it}(it+1,it+1) = 0$.
+En reprenant le calcul ci-dessus on voit que cela implique alors que : $ \\ Q_{it}(it+1, it) = 0 \Rightarrow (Q^t_{it+1}*T_{it+2}) (it+2,it+2) =0 \Rightarrow \gamma =0 \Rightarrow c_{it+2} =0 $.
+Ce qui conclut la preuve.
+
+
+\end{proof}
+ 
+Ce résultat est important pour la compréhension de l'algorithme. En effet on remarque que $T(1,1) =0 \Rightarrow c_1 =0$. Ceci donne lieu au résultat suivant : 
+
+\begin{theorem}
+Pour tout it impaire : 
+  \[c_{it}= 0  \ s_{it}=1\]
+\end{theorem}
+
+Ceci a des conséquences au niveau de la convergence de l'algorithme. En effet :
+ $ \\ 
+(Q_{it}[it+1,1])
+\leftarrow 
+\left (\begin{array}{cc} -s_{it} & c_{it} \end{array} \right )
+\left (\begin{array}{c} (-1)^{it-1}\prod_{i=1}^{it-1} s_{it} \\ 0 \end{array} \right ) \\
+$
+
+On conclut alors que lorsque it est impaire :
+ \[ \\
+ \vert Q_{it}(it+1,1) \vert = \vert Q_{it-1}(it,1) \vert \]
+ \[ \Vert Mr_{it} \Vert = \Vert Mr_{it-1} \Vert \\ \]
+
+L'algorithme ne converge donc que lorsque les itérations sont paires. (Préciser que $c_{it} \neq 0$ lorsque it est paire ).
+
+\subsection*{Reconstitution des matrices et calcul de la solution}
+
+Point noir de L'algorithme. Une fois la boucle terminé le calcul de la solution $x_n$ necessite de mettre V sous forme de matrice, ainsi que le calcul de $Q_n, R_n$ ce qui plombe les performances de l'algorithme
+lorsque la dimension d devient grande. On a alors l'équation : 
+\[ x_n = x_0 + V_n*t_n \] Où $t_{n} \in S_n = K_n(A,r_0)$ (espace de recherche) 
+
+\subsection*{Lanczos et Arnoldi}
+
+\subsection*{La tridiagonalité de T engendre celle de $R_{it}$}  
+
+Cela se vérifie en éffectuant le produit de T par les matrices de rotations $G_{j}$ pour $1 \leq j \leq it$. On rappelle que :
+\[ \prod_{j=1}^{it} G_{j}*T = Q^t_{it}*T = R_{it} \] 
+et que les coefficients $c_j$ et $s_j$ sont calculés de façon à ce que :
+\[ -s_j    + c_j*T(j+1,j) = 0\]
+Pour $ j = 1 $ : 
+$ \left (\begin{array}{cc} c_1 & s_1 \\ -s_1 & c_1 \end{array} \right )
+  \left (\begin{array}{ccc} t_{1,1} & t_{1,2} & 0 \\ t_{2,1} & t_{2,2} & t_{2,3} \end{array} \right ) 
+  \rightarrow 
+  \left (\begin{array}{ccc} \alpha_1 & \alpha_2 & \alpha_3 \\ 0 & \beta_1 & \beta_2 \end{array} \right )
+$
+Les $it -1$ autres coefficients de la matrice de rotation valant 1 sur la diagonale et 0 ailleurs, on en déduit que les $it - 1$ autres lignes de T soient préservées
+lors du produit.
+On en déduit donc que $R_{it}$ est triangulaire supérieure et possède trois diagonales non-nulles
+
+\subsection*{Du système de départ à la solution}
+
+Comme, on suppose, A inversible et symmétrique. MA est à son tour inversible et symétrique et on a : 
+$\\ MA^{-1} = \begin{pmatrix} 0 & A^{-t} \\ A^{-1} & 0 \end{pmatrix} \\ $ 
+On a alors (Liesen et Strakos) que pour l'espace de recherche $S_n = K_n(MA,Mr_0)$, et l'espace de contraintes $C_n = MA*S_n$, le processus de projection est bien défini pour tout entier n,
+jusqu'à 2*d, ou l'on rappelle que d es la dimension du problème considéré. On note également le système assoicié :
+$ \\
+\begin{cases}
+  Mx_n &= Mx_0 + V_n*t_n   \\
+  Mr_n &= Mr_0 - MA*V_n*t_n 
+  \end{cases}$
+où $t_n \in S_n$ et où $Mr_n \bot C_n$.
+
+
+On part de la condition d'orthogonalité. On constate alors que :
+$ 0 = (MA*V_n)^t*(Mr_0 - MA*V_n*t_n) \\
+\Leftrightarrow (MA*V_n)^tMr_0 = (MA*V_n)^t(MA*V_n)t_n  \\
+\Leftrightarrow (V_{n+1}*T)^tMr_0 =(V_{n+1}*T)^t(V_{n+1}*T)t_n \\
+\Leftrightarrow Mr_0 = (V_{n+1}*T)t_n \\
+\Leftrightarrow T^{-1}V_{n+1}^tMr_0 = t_n \\
+$ 
+Or $V_{n+1}$ est une base orthonormale de $K_n(MA,Mr0)$ donc : 
+$ \\ r_n \bot C_n \Leftrightarrow T^{-1}* \Vert Mr_0 \Vert e_1 = t_n  \\
+\Leftrightarrow R^{-1}_n*\begin{pmatrix} I_n \\ 0 \end{pmatrix}*Q_n*\Vert Mr_0 \Vert e_1 = t_n $
+
+On a donc en reprenant la première équation que :
+
+$\\ Mx_n = Mx_0 + V_n*R^{-1}_n*\begin{pmatrix} I_n \\ 0 \end{pmatrix}*Q_n*\Vert Mr_0 \Vert e_1 \\$
+Que l'on peut également écrire : 
+$\\ Mx_n = Mx_0 + V_n*R^{-1}_n*(\Vert Mr_0 \Vert*Q_n[1:n,1])  \\$
+
+\subsection*{Passage à une récurrence à deux termes}
+
+On remarque que :
+$ \\ R^{-1}_{n} = T*\begin{pmatrix} Q_{n-1} & 0 \\ 0 & 1 \end{pmatrix}*G^{-1}_n \\
+   = \begin{pmatrix} R^{-1}_{n-1} & R^{-1}_n[1:n-1,n] \\ 0 & R^{-1}_n[n,n] \end{pmatrix} \\ $
+On passe alors à l'expression de $x_n$ :
+$\\ Mx_n = Mx_0 + V_{n}*R^{-1}_n*\Vert Mr_0 \Vert*Q_n*\xi_n  \\
+         = Mx_0 + V_{n}\begin{pmatrix} R^{-1}_{n-1} & R^{-1}_n[1:n-1,n] \\ 0 & R^{-1}_n[n,n] \end{pmatrix}*G^{-1}_n*\beta*G_n*\begin{pmatrix} Q_{n-1} & 0 \\ 0 & 1 \end{pmatrix}*\begin{pmatrix} \xi[1:n-1] \\ \xi[n] \end{pmatrix} \\ 
+         = Mx_0 + \beta*\begin{pmatrix} V_{n-1}*R^{-1}_{n-1} & (V_n*R^{-1}_n)[:,n]  \end{pmatrix}*\begin{pmatrix} Q_{n-1}*\xi[1:n-1] \\ \xi[n] \end{pmatrix} \\ 
+         = Mx_0 + \beta*(V_{n-1}*R^{-1}_{n-1}*Q_{n-1}*\xi[1:n-1]) + \beta*V_{n}*R^{-1}_n[:,n]*\xi[n] \\
+         = Mx_{n-1} + \beta*V_{n}*R^{-1}_n[:,n]*\xi[n] \\$
+
+\subsection*{Apport de Greenbaum}
+
+Afin de mettre à profit la relation de récurrence que nous venons de démontrer on introduit la matrice :
+ \[ \Psi_n = V_nR^{-1}_n \] où $\Psi_n$ est de la forme : \[
+  \Psi_n = \begin{array}{cccc} \psi_0 & \psi_1 & ... & \psi{n-1} \end{array} \]
+La relation de récurrence ci-dessus devient alors : 
+\[ Mx_n = Mx_{n-1} + \beta*\psi_{n-1}*\xi_n \]
+L'enjeu devient alors de trouver comment déterminer $\psi_{n-1}$. 
+On remarque immédiatement que : \[ 
+ \Psi_n* R_n = V_n \]
+On utilise alors la tridiagonalité de $R_n$ pour déduire la formule suivante :
+\[ v_n = R_n[n-2,n]*\psi_{n-3} + R_n[n-1,n]*\psi_{n-2} + R_n[n,n]*\psi_{n-1} \]
+\[ \Leftrightarrow \psi_{n-1} = (v_n - R_n[n-1,n]*\psi_{n-2} - R_n[n-2,n]*\psi_{n-1})/R_n[n,n] \] 
+Tant que $R_n[n,n] \neq 0$ On verra que cette condition est presque toujours réalisé  et que dans notre cas elle équivaut à ce que 
+$T[n+1,n] \neq 0$.
+
+\subsection*{Déterminer $R_n[n-2,n]$, $R_n[n-1,n]$, et $R_n[n,n]$}
+
+On rappelle comment trouver $R_n$ :
+\[ R_n = G_n*\begin{pmatrix} Q_{n-1} & 0 \\ 0 & 1 \end{pmatrix}*T \] 
+\[  = G_n*\begin{pmatrix} Q_{n-1}*T[1:n,:] \\ T[n+1,:] \end{pmatrix} \]
+On observe alors les valeurs suivantes : 
+$ \\
+\begin{cases}
+  R_n[n-2,n] &= (Q_{n-1}*T[1:n,:])[n-2,n]  \\
+  R_n[n-1,n] &= (Q_{n-1}*T[1:n,:])[n-1,n]  \\
+  R_n[n,n] &= c_n*(Q_{n-1}*T[1:n,:])[n,n] + s_nT[n+1,n]  \\
+  R_n[n+1,n] &= 0 
+\end{cases} \\ $
+Où la dernière ligne se déduit par le caractère triangulaire supérieur de la matrice $R_n$. On calcule alors l'expression $Q_{n-1}*T[1:n,:]$ :
+\[ Q_{n-1}*T[1:n,:] = G_{n-1}*\begin{pmatrix} Q_{n-2} & 0 \\ 0 & 1 \end{pmatrix}*T[1:n,:] \] 
+\[  = G_{n-1}*\begin{pmatrix} Q_{n-2}*T[1:n-1,:] \\ T[n,:] \end{pmatrix} \]
+On observe alors le système suivant : $
+\begin{cases} 
+  (Q_{n-1}*T[1:n,:])[n-2,n] &= (Q_{n-2}*T[1:n-1,:])[n-2,n] \\
+  (Q_{n-1}*T[1:n,:])[n-1,n] &= c_{n-1}(Q_{n-2}*T[1:n-1,:])[n-1,n] + s_{n-1}T[n,n] \\
+  (Q_{n-1}*T[1:n,:])[n,n] &=  -s_{n-1}(Q_{n-2}*T[1:n-1,:])[n-1,n] +c_{n-1}T[n,n] 
+\end{cases}$
+Idem pour $(Q_{n-2}*T[1:n-1,:])$:
+\[ Q_{n-2}*T[1:n-1,:] = G_{n-2}*\begin{pmatrix} Q_{n-3} & 0 \\ 0 & 1 \end{pmatrix}*T[1:n-1,:] \] 
+\[  = G_{n-2}*\begin{pmatrix} Q_{n-3}*T[1:n-2,:] \\ T[n-1,:] \end{pmatrix} \]
+Ce qui donne :$\\
+\begin{cases}
+  (Q_{n-2}*T[1:n-1,:])[n-2,n] = c_{n-2}(Q_{n-3}*T[1:n-2,:])[n-2,n] + s_{n-2}T[n-1,n] \\
+  (Q_{n-2}*T[1:n-1,:])[n-1,n] = -s_{n-2}(Q_{n-3}*T[1:n-2,:])[n-2,n] + c_{n-2}T[n-1,n]
+\end{cases} \\ $
+Or en regardant comment nous avons procédé, on observe que $(Q_{n-3}*T[1:n-2,:])[n-2,n]$ est une combinaison linéaire des $T[j,n] \forall 1 \leq j \leq n-2$ . 
+Comme pour de tels $j$ , $T[j,n] = 0$, on déduit que $(Q_{n-3}*T[1:n-2,:])[n-2,n] = 0$. Ainsi : $\\
+\begin{cases}
+  (Q_{n-2}*T[1:n-1,:])[n-2,n] = s_{n-2}T[n-1,n] \\
+  (Q_{n-2}*T[1:n-1,:])[n-1,n] = c_{n-2}T[n-1,n]
+\end{cases} \\ $ 
+et : 
+$ \\
+\begin{cases}
+  R_n[n-2,n] &= s_{n-2}T[n-1,n]  \\
+  R_n[n-1,n] &= c_{n-1}c_{n-2}T[n-1,n] + s_{n-1}T[n,n]  \\
+  R_n[n,n] &= c_n*(-s_{n-1}c_{n-2}T[n-1,n] + c_{n-1}T[n,n] ) + s_nT[n+1,n]  \\
+  R_n[n+1,n] &= 0 
+\end{cases} \\ $
+On remarque que dans le cas présent $c_{n-1}c_{n-2} =0$ $\forall n$. Couplé au fait que $T[n,n]=0$ $\forall n$. On a que $R[n-1,n] = 0$ $\forall n$ dans ce cas particulier. 
+Pour le problème $MA*Mx= Mb$ $R_{it}$ possède donc seulement deux diagonales non nulles.
+ De plus, dans le cas où n est impaire :
+$R_n[n,n] = T[n+1,n] $. 
+
+\subsection*{Déterminer $s_{it}$ et $c_{it}$}
+
+On pose pour la suite : 
+\[ \gamma_{it} = (-s_{it-1}c_{it-2}T[it-1,it] + c_{it-1}T[it,it] )  \\ \]
+
+On déduit des deux dernières lignes du système précédent que $s_{it}$ et $c_{it}$ satisfont le système suivant : $\\ 
+\begin{cases}
+  R_{it}[it,it] &= c_{it}*\gamma_{it} + s_{it}T[it+1,it]  \\
+  0 &= -s_{it}*\gamma_{it} + c_{it}T[it+1,it]
+\end{cases} \\ $
+On suppose pour l'instant que $\gamma_it \neq 0 $ $\forall it$ . Le système donne alors : $\\
+\begin{cases}
+  R_{it}[it,it] &= c_{it}*\gamma_{it} + s_{it}T[it+1,it] (1) \\
+  s_{it} &= c_{it}\frac{T[it+1,it]}{\gamma_{it}} (2) \\
+  c_{it} &= \frac{R{it}[it,it]*\gamma_{it}}{( \gamma^2_{it} + T[it+1,it]^2 )}  (3)  
+\end{cases} \\ $
+
+On aimerait que $(3)$ soit égal à :
+\[ c_{it} = \frac{\gamma_{it}}{\sqrt{ \gamma^2_{it} + T[it+1,it]^2} } \]
+
+Pour cela il est nécessaire que l'on ait $R_it[it,it] = \sqrt{{ \gamma^2_{it} + T[it+1,it]^2}}$. Or on remarque que  : 
+$\\ (c_{it}*\gamma_{it} + s_{it}T[it+1,it])^2 = c^2_{it}\gamma^2_{it} + 2*c_{it}s_{it}\gamma_{it}T[it+1,it] s^2_{it}T[it+1,it]^2  \\
+        =  c^2_{it}\gamma^2_{it} + c_{it}s_{it}\gamma_{it}T[it+1,it]  + c_{it}s_{it}\gamma_{it}T[it+1,it] + s^2_{it}T[it+1,it]^2 $
+En utilisant $(2)$ sur les deux termes du milieu on remarque que :
+$\\ (c_{it}*\gamma_{it} + s_{it}T[it+1,it])^2 = (c^2_{it} + s^2_{it})\gamma^2_{it} + (c^2_{it} + s^2_{it})T[it+1,it]^2  
+$
+Or comme $s_{it}$ et $c_{it}$ sont les coefficients lignes d'une matrice de rotation. Par orthogonalité de cette dernière on a que :
+\[ c^2_{it} + s^2_{it} = 1 \]
+Ce qui donne :
+$\\ (c_{it}*\gamma_{it} + s_{it}T[it+1,it])^2 = \gamma^2_{it} + T[it+1,it]^2 \\ $ 
+qui est l'égalité que l'on cherchait. 
+Ainsi le système $(1)-(2)-(3)$ est équivalent à :
+$ c_{it} = \frac{\gamma_{it}}{\sqrt{ \gamma^2_{it} + T[it+1,it]^2} }  $ et $  s_{it} = \frac{T[it+1,it]}{\sqrt{ \gamma^2_{it} + T[it+1,it]^2} } $. $\\$
+
+On remarque que dans le problème courant: $c_{it-2} = 0 \leftarrow \gamma_{it} =0 $. Dans ce cas, on retrouve $c_{it} =0 $ et $s_{it}=1$. On a donc redémontrer le théorème un peu plus haut.    
+
+\subsection*{Nouveau problème}
+
+On introduit une nouvelle matrice $MA2= \begin{pmatrix} P & A^t \\ A & 0 \end{pmatrix}$ où P est une matrice symétrique.
+
+\section{Conclusion}
+
+\end{document}
+
+
